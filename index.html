@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Correios - Rateio</title>
+<link rel="icon" href="correios.ico">
+<style>
+  :root { --bg:#f4f6f8; --card:#fff; --txt:#1c2733; --mut:#6b7885; --brand:#0b5cab; --line:#dde3ea; --bad:#c0392b; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14181d; --card:#1e242b; --txt:#e8edf2; --mut:#93a0ad; --brand:#5aa2ee; --line:#323b45; --bad:#ef7b6e; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.35 system-ui,Segoe UI,Arial,sans-serif; }
+  main { max-width:880px; margin:0 auto; padding:18px 16px 110px; }
+  h1 { font-size:20px; margin:0 0 12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:9px; margin-bottom:6px; position:relative; }
+  .card.over-top::before, .card.over-bottom::after { content:""; position:absolute; left:0; right:0; height:3px; background:var(--brand); border-radius:3px; }
+  .card.over-top::before { top:-5px; } .card.over-bottom::after { bottom:-5px; }
+  .card.dragging { opacity:.4; }
+  .line { display:flex; align-items:center; gap:12px; padding:8px 10px; }
+  .grip { cursor:grab; color:var(--mut); user-select:none; padding:4px 2px; font-size:16px; letter-spacing:-3px; }
+  .lojas { flex:1; min-width:0; font-weight:600; }
+  .perc { color:var(--mut); white-space:nowrap; font-size:13px; }
+  .perc b { color:var(--txt); font-size:15px; }
+  input { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--txt); min-width:0; }
+  input:focus { outline:2px solid var(--brand); outline-offset:-1px; }
+  input.valor { width:140px; text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+  .split { min-width:150px; font-size:12.5px; color:var(--mut); font-variant-numeric:tabular-nums; }
+  .split div { display:flex; justify-content:space-between; gap:10px; }
+  button { font:inherit; padding:7px 13px; border:0; border-radius:7px; background:var(--brand); color:#fff; cursor:pointer; }
+  button.sec { background:transparent; color:var(--brand); border:1px solid var(--line); }
+  button.del { background:transparent; color:var(--bad); border:1px solid var(--line); }
+  button.tog { background:transparent; color:var(--mut); padding:4px 8px; font-size:14px; }
+  button:hover { filter:brightness(1.1); }
+  .edit { border-top:1px solid var(--line); padding:10px 12px 12px 34px; display:none; }
+  .card.open .edit { display:block; }
+  .card.open .tog { transform:rotate(180deg); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  .row label { color:var(--mut); font-size:13px; }
+  .grow { flex:1; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { background:var(--bg); border:1px solid var(--line); border-radius:99px; padding:2px 5px 2px 12px; display:flex; align-items:center; gap:4px; }
+  .chip button { background:none; color:var(--mut); padding:0 6px; font-size:16px; line-height:1; }
+  details.novo { background:var(--card); border:1px solid var(--line); border-radius:9px; padding:10px 14px; margin-bottom:12px; }
+  details.novo summary { cursor:pointer; font-weight:600; }
+  details.novo .row { margin:10px 0 0; }
+  .msg { color:var(--bad); font-size:13px; min-height:16px; margin-top:6px; }
+  .empty { color:var(--mut); text-align:center; padding:24px; }
+  .bar { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line); box-shadow:0 -4px 14px rgba(0,0,0,.08); }
+  .bar div.in { max-width:880px; margin:0 auto; padding:12px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .bar .tot { margin-left:auto; text-align:right; }
+  .bar .tot small { display:block; color:var(--mut); font-size:12px; }
+  .bar .tot strong { font-size:22px; font-variant-numeric:tabular-nums; }
+  @media (max-width:640px) { .line { flex-wrap:wrap; } .split { min-width:0; flex:1 1 100%; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Correios - Rateio de cartões de postagem</h1>
+
+  <details class="novo" id="novo">
+    <summary>Novo cartão</summary>
+    <div class="row">
+      <input id="novoCod" placeholder="Código do cartão" style="width:170px">
+      <input id="novoPercurso" placeholder="Percurso" style="width:120px">
+      <input id="novasLojas" class="grow" placeholder="Lojas separadas por vírgula (ex: Loja A, Loja B)" style="min-width:220px">
+      <button id="btnAdd">Cadastrar</button>
+    </div>
+    <div class="msg" id="msgAdd"></div>
+  </details>
+
+  <div id="lista"></div>
+
+  <div class="row" style="margin-top:14px">
+    <button class="sec" id="btnLimpar">Limpar valores</button>
+    <button class="sec" id="btnExp">Salvar backup</button>
+    <button class="sec" id="btnImp">Restaurar backup</button>
+    <input type="file" id="fileImp" accept=".json" hidden>
+  </div>
+</main>
+
+<div class="bar"><div class="in">
+  <span id="barInfo" style="color:var(--mut)"></span>
+  <div class="tot"><small>Total geral</small><strong id="total">R$ 0,00</strong></div>
+</div></div>
+
+<script>
+const KEY = 'correios_rateio_v1', KEYV = 'correios_valores_v1';
+let dados = [];        // [{cod, percurso, lojas:[...]}]
+let valores = {};      // cod -> centavos (inteiro)
+const abertos = new Set();
+
+function ler(k, pad) { try { return JSON.parse(localStorage.getItem(k)) || pad; } catch (e) { return pad; } }
+function gravar(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+const salvar = () => gravar(KEY, dados);
+const salvarValores = () => gravar(KEYV, valores);
+
+const brl = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const num = c => (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* Cartão "lançamentos de débitos": o valor dele é dividido igualmente entre os demais cartões */
+const semAcento = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function ehDebito(c) {
+  if (typeof c.debito === 'boolean') return c.debito;
+  return [c.cod, ...c.lojas].some(t => /lancamentos?\s+de\s+debitos?/.test(semAcento(t)));
+}
+// centavos extras (parte do débito) que cada cartão comum recebe
+function extrasDebito() {
+  const recebem = dados.filter(c => !ehDebito(c));
+  const D = dados.filter(ehDebito).reduce((s, c) => s + (valores[c.cod] || 0), 0);
+  const mapa = {}, n = recebem.length;
+  if (!n) return { mapa, D, n };
+  const base = Math.floor(D / n), resto = D % n;
+  recebem.forEach((c, i) => mapa[c.cod] = base + (i < resto ? 1 : 0));
+  return { mapa, D, n };
+}
+function divisao(cartao, total) {
+  const n = cartao.lojas.length;
+  const base = Math.floor(total / n), resto = total % n;
+  return cartao.lojas.map((l, i) => ({ loja: l, v: base + (i < resto ? 1 : 0) }));
+}
+function splitHTML(c, ex) {
+  ex = ex || extrasDebito();
+  if (ehDebito(c)) {
+    if (!(ex.D > 0) || !ex.n) return '';
+    return `<div><span>Dividido em ${ex.n} cartões</span><span>≈ ${num(Math.floor(ex.D / ex.n))}</span></div>`;
+  }
+  const extra = ex.mapa[c.cod] || 0, comb = (valores[c.cod] || 0) + extra;
+  if (!(comb > 0)) return '';
+  let h = extra > 0 ? `<div><span>Débito</span><span>+ ${num(extra)}</span></div>` : '';
+  if (c.lojas.length > 1) h += divisao(c, comb).map(p => `<div><span>${esc(p.loja)}</span><span>${num(p.v)}</span></div>`).join('');
+  else if (extra > 0) h += `<div><span>Total</span><span>${num(comb)}</span></div>`;
+  return h;
+}
+function atualizarSplits() {
+  const ex = extrasDebito();
+  lista.querySelectorAll('section').forEach(sec => { sec.querySelector('.split').innerHTML = splitHTML(dados[+sec.dataset.i], ex); });
+}
+function atualizarTotal() {
+  let soma = 0, preenchidos = 0;
+  dados.forEach(c => { const v = valores[c.cod] || 0; if (v > 0) { soma += v; preenchidos++; } });
+  document.getElementById('total').textContent = brl(soma);
+  document.getElementById('barInfo').textContent = preenchidos + ' de ' + dados.length + ' cartões preenchidos';
+}
+
+function desenhar() {
+  const el = document.getElementById('lista');
+  if (!dados.length) { el.innerHTML = '<div class="card empty">Nenhum cartão cadastrado ainda.</div>'; atualizarTotal(); return; }
+  const ex = extrasDebito();
+  el.innerHTML = dados.map((c, i) => `
+    <section class="card ${abertos.has(c.cod) ? 'open' : ''}" data-i="${i}">
+      <div class="line">
+        <span class="grip" title="Arraste para reordenar">⋮⋮</span>
+        <div class="lojas">${esc(c.lojas.join(' · '))}</div>
+        <span class="perc">Cartão <b>${esc(c.cod)}</b></span>
+        <span class="perc">Percurso <b data-role="perc">${esc(c.percurso || '—')}</b></span>
+        <input class="valor" inputmode="numeric" autocomplete="off" placeholder="0,00" value="${valores[c.cod] > 0 ? num(valores[c.cod]) : ''}">
+        <div class="split">${splitHTML(c, ex)}</div>
+        <button class="tog" data-act="tog" title="Editar">▾</button>
+      </div>
+      <div class="edit">
+        <div class="row">
+          <label>Cartão</label><strong>${esc(c.cod)}</strong>
+          <label style="margin-left:12px">Percurso</label>
+          <input data-act="percurso" value="${esc(c.percurso || '')}" style="width:120px">
+          <span class="grow"></span>
+          <button class="del" data-act="rm">Remover cartão</button>
+        </div>
+        <div class="row"><label><input type="checkbox" data-act="debito" ${ehDebito(c) ? 'checked' : ''}> Lançamento de débitos (o valor é dividido igualmente entre os demais cartões)</label></div>
+        <div class="row"><label>Lojas</label>
+          <div class="chips">${c.lojas.map((l, j) => `<span class="chip">${esc(l)}<button data-act="rmloja" data-j="${j}" title="Remover loja">×</button></span>`).join('')}</div>
+        </div>
+        <div class="row">
+          <input data-act="loja" placeholder="Adicionar loja" style="width:200px">
+          <button class="sec" data-act="addloja">+ Loja</button>
+        </div>
+      </div>
+    </section>`).join('');
+  atualizarTotal();
+}
+
+/* ---- cadastro ---- */
+function adicionarCartao() {
+  const cod = document.getElementById('novoCod').value.trim();
+  const percurso = document.getElementById('novoPercurso').value.trim();
+  const lojas = document.getElementById('novasLojas').value.split(',').map(s => s.trim()).filter(Boolean);
+  const msg = document.getElementById('msgAdd');
+  if (!cod) { msg.textContent = 'Informe o código do cartão.'; return; }
+  if (!lojas.length) { msg.textContent = 'Informe ao menos uma loja.'; return; }
+  if (dados.some(c => c.cod.toLowerCase() === cod.toLowerCase())) { msg.textContent = 'Esse cartão já está cadastrado.'; return; }
+  dados.push({ cod, percurso, lojas });
+  salvar(); msg.textContent = '';
+  ['novoCod', 'novoPercurso', 'novasLojas'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('novoCod').focus();
+  desenhar();
+}
+document.getElementById('btnAdd').onclick = adicionarCartao;
+['novoCod', 'novoPercurso', 'novasLojas'].forEach(id =>
+  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') adicionarCartao(); }));
+
+/* ---- lista ---- */
+const lista = document.getElementById('lista');
+const cartaoDe = el => dados[+el.closest('section').dataset.i];
+
+lista.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const sec = b.closest('section'), i = +sec.dataset.i, c = dados[i];
+  switch (b.dataset.act) {
+    case 'tog':
+      abertos.has(c.cod) ? abertos.delete(c.cod) : abertos.add(c.cod);
+      sec.classList.toggle('open'); break;
+    case 'rm':
+      if (confirm('Remover o cartão ' + c.cod + '?')) { delete valores[c.cod]; dados.splice(i, 1); salvar(); salvarValores(); desenhar(); }
+      break;
+    case 'rmloja':
+      c.lojas.splice(+b.dataset.j, 1);
+      if (!c.lojas.length) { delete valores[c.cod]; dados.splice(i, 1); salvarValores(); }
+      salvar(); desenhar(); break;
+    case 'addloja': {
+      const v = sec.querySelector('[data-act=loja]').value.trim();
+      if (v) { c.lojas.push(v); salvar(); desenhar(); }
+    }
+  }
+});
+
+lista.addEventListener('input', e => {
+  const t = e.target, sec = t.closest('section'); if (!sec) return;
+  const c = cartaoDe(t);
+  if (t.dataset.act === 'percurso') {
+    c.percurso = t.value.trim(); salvar();
+    sec.querySelector('[data-role=perc]').textContent = c.percurso || '—';
+    return;
+  }
+  if (!t.classList.contains('valor')) return;
+  // máscara de moeda: só dígitos, entram da direita para a esquerda
+  const dig = t.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 11);
+  const cent = dig ? parseInt(dig, 10) : 0;
+  t.value = cent ? num(cent) : '';
+  if (cent) valores[c.cod] = cent; else delete valores[c.cod];
+  salvarValores();
+  atualizarSplits();
+  atualizarTotal();
+});
+lista.addEventListener('change', e => {
+  if (e.target.dataset.act !== 'debito') return;
+  cartaoDe(e.target).debito = e.target.checked;
+  salvar(); desenhar();
+});
+
+lista.addEventListener('keydown', e => {
+  const t = e.target;
+  if (e.key === 'Enter' && t.dataset.act === 'loja') { t.closest('section').querySelector('[data-act=addloja]').click(); return; }
+  if (e.key === 'Enter' && t.classList.contains('valor')) {
+    e.preventDefault();
+    const todos = [...lista.querySelectorAll('input.valor')];
+    const prox = todos[todos.indexOf(t) + 1];
+    if (prox) { prox.focus(); prox.select(); } else t.blur();
+  }
+});
+lista.addEventListener('focusin', e => { if (e.target.classList.contains('valor')) e.target.select(); });
+
+/* ---- arrastar para reordenar ---- */
+let arrasto = null;
+lista.addEventListener('mousedown', e => {
+  const sec = e.target.closest('section');
+  if (sec) sec.draggable = !!e.target.closest('.grip');
+});
+lista.addEventListener('dragstart', e => {
+  const sec = e.target.closest && e.target.closest('section');
+  if (!sec || !sec.draggable) { e.preventDefault(); return; }
+  arrasto = +sec.dataset.i;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', String(arrasto));
+  setTimeout(() => sec.classList.add('dragging'), 0);
+});
+function limparGuias() { lista.querySelectorAll('.over-top,.over-bottom').forEach(x => x.classList.remove('over-top', 'over-bottom')); }
+lista.addEventListener('dragover', e => {
+  if (arrasto === null) return;
+  const sec = e.target.closest('section'); if (!sec) return;
+  e.preventDefault();
+  const r = sec.getBoundingClientRect();
+  limparGuias();
+  sec.classList.add(e.clientY < r.top + r.height / 2 ? 'over-top' : 'over-bottom');
+});
+lista.addEventListener('drop', e => {
+  if (arrasto === null) return;
+  const sec = e.target.closest('section'); if (!sec) return;
+  e.preventDefault();
+  const r = sec.getBoundingClientRect();
+  let destino = +sec.dataset.i + (e.clientY < r.top + r.height / 2 ? 0 : 1);
+  const [item] = dados.splice(arrasto, 1);
+  if (arrasto < destino) destino--;
+  dados.splice(destino, 0, item);
+  arrasto = null; salvar(); desenhar();
+});
+lista.addEventListener('dragend', () => { arrasto = null; limparGuias(); lista.querySelectorAll('section').forEach(s => { s.draggable = false; s.classList.remove('dragging'); }); });
+
+/* ---- rodapé ---- */
+document.getElementById('btnLimpar').onclick = () => {
+  if (confirm('Limpar todos os valores digitados?')) { valores = {}; salvarValores(); desenhar(); }
+};
+document.getElementById('btnExp').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' }));
+  a.download = 'correios-backup.json'; a.click();
+};
+document.getElementById('btnImp').onclick = () => document.getElementById('fileImp').click();
+document.getElementById('fileImp').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => {
+    try {
+      const d = JSON.parse(t);
+      if (!Array.isArray(d) || !d.every(c => c && typeof c.cod === 'string' && Array.isArray(c.lojas))) throw 0;
+      if (confirm('Substituir os cartões atuais pelo backup?')) { dados = d; valores = {}; salvar(); salvarValores(); desenhar(); }
+    } catch (x) { alert('Arquivo de backup inválido.'); }
+  });
+  e.target.value = '';
+};
+
+dados = ler(KEY, []); valores = ler(KEYV, {});
+desenhar();
+</script>
+</body>
+</html>
