@@ -59,7 +59,7 @@
 <main>
   <h1>Correios - Rateio de cartões de postagem</h1>
 
-  <details class="novo" id="novo">
+  <details class="novo">
     <summary>Novo cartão</summary>
     <div class="row">
       <input id="novoCod" placeholder="Código do cartão" style="width:170px">
@@ -98,10 +98,11 @@ const salvarValores = () => gravar(KEYV, valores);
 
 const brl = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const num = c => (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* Cartão "lançamentos de débitos": o valor dele é dividido igualmente entre os demais cartões */
-const semAcento = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const semAcento = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 function ehDebito(c) {
   if (typeof c.debito === 'boolean') return c.debito;
   return [c.cod, ...c.lojas].some(t => /lancamentos?\s+de\s+debitos?/.test(semAcento(t)));
@@ -122,7 +123,6 @@ function divisao(cartao, total) {
   return cartao.lojas.map((l, i) => ({ loja: l, v: base + (i < resto ? 1 : 0) }));
 }
 function splitHTML(c, ex) {
-  ex = ex || extrasDebito();
   if (ehDebito(c)) {
     if (!(ex.D > 0) || !ex.n) return '';
     return `<div><span>Dividido em ${ex.n} cartões</span><span>≈ ${num(Math.floor(ex.D / ex.n))}</span></div>`;
@@ -141,12 +141,12 @@ function atualizarSplits() {
 function atualizarTotal() {
   let soma = 0, preenchidos = 0;
   dados.forEach(c => { const v = valores[c.cod] || 0; if (v > 0) { soma += v; preenchidos++; } });
-  document.getElementById('total').textContent = brl(soma);
-  document.getElementById('barInfo').textContent = preenchidos + ' de ' + dados.length + ' cartões preenchidos';
+  $('total').textContent = brl(soma);
+  $('barInfo').textContent = preenchidos + ' de ' + dados.length + ' cartões preenchidos';
 }
 
 function desenhar() {
-  const el = document.getElementById('lista');
+  const el = $('lista');
   if (!dados.length) { el.innerHTML = '<div class="card empty">Nenhum cartão cadastrado ainda.</div>'; atualizarTotal(); return; }
   const ex = extrasDebito();
   el.innerHTML = dados.map((c, i) => `
@@ -183,25 +183,25 @@ function desenhar() {
 
 /* ---- cadastro ---- */
 function adicionarCartao() {
-  const cod = document.getElementById('novoCod').value.trim();
-  const percurso = document.getElementById('novoPercurso').value.trim();
-  const lojas = document.getElementById('novasLojas').value.split(',').map(s => s.trim()).filter(Boolean);
-  const msg = document.getElementById('msgAdd');
+  const cod = $('novoCod').value.trim();
+  const percurso = $('novoPercurso').value.trim();
+  const lojas = $('novasLojas').value.split(',').map(s => s.trim()).filter(Boolean);
+  const msg = $('msgAdd');
   if (!cod) { msg.textContent = 'Informe o código do cartão.'; return; }
   if (!lojas.length) { msg.textContent = 'Informe ao menos uma loja.'; return; }
   if (dados.some(c => c.cod.toLowerCase() === cod.toLowerCase())) { msg.textContent = 'Esse cartão já está cadastrado.'; return; }
   dados.push({ cod, percurso, lojas });
   salvar(); msg.textContent = '';
-  ['novoCod', 'novoPercurso', 'novasLojas'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('novoCod').focus();
+  ['novoCod', 'novoPercurso', 'novasLojas'].forEach(id => $(id).value = '');
+  $('novoCod').focus();
   desenhar();
 }
-document.getElementById('btnAdd').onclick = adicionarCartao;
+$('btnAdd').onclick = adicionarCartao;
 ['novoCod', 'novoPercurso', 'novasLojas'].forEach(id =>
-  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') adicionarCartao(); }));
+  $(id).addEventListener('keydown', e => { if (e.key === 'Enter') adicionarCartao(); }));
 
 /* ---- lista ---- */
-const lista = document.getElementById('lista');
+const lista = $('lista');
 const cartaoDe = el => dados[+el.closest('section').dataset.i];
 
 lista.addEventListener('click', e => {
@@ -298,16 +298,16 @@ lista.addEventListener('drop', e => {
 lista.addEventListener('dragend', () => { arrasto = null; limparGuias(); lista.querySelectorAll('section').forEach(s => { s.draggable = false; s.classList.remove('dragging'); }); });
 
 /* ---- rodapé ---- */
-document.getElementById('btnLimpar').onclick = () => {
+$('btnLimpar').onclick = () => {
   if (confirm('Limpar todos os valores digitados?')) { valores = {}; salvarValores(); desenhar(); }
 };
-document.getElementById('btnExp').onclick = () => {
+$('btnExp').onclick = () => {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' }));
   a.download = 'correios-backup.json'; a.click();
 };
-document.getElementById('btnImp').onclick = () => document.getElementById('fileImp').click();
-document.getElementById('fileImp').onchange = e => {
+$('btnImp').onclick = () => $('fileImp').click();
+$('fileImp').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
   f.text().then(t => {
     try {
